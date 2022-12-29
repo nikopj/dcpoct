@@ -78,6 +78,7 @@ class ModelNet40(Dataset):
 
     def __getitem__(self, item):
         pointcloud = self.data[item][:self.num_points]
+
         if self.gaussian_noise:
             pointcloud = jitter_pointcloud(pointcloud)
         if self.partition != 'train':
@@ -117,7 +118,6 @@ class ModelNet40(Dataset):
 
         pointcloud1 = np.random.permutation(pointcloud1.T).T
         pointcloud2 = np.random.permutation(pointcloud2.T).T
-
         return pointcloud1.astype('float32'), pointcloud2.astype('float32'), R_ab.astype('float32'), \
                translation_ab.astype('float32'), R_ba.astype('float32'), translation_ba.astype('float32'), \
                euler_ab.astype('float32'), euler_ba.astype('float32')
