@@ -29,6 +29,12 @@ def quat2mat(quat):
                           2*xz - 2*wy, 2*wx + 2*yz, w2 - x2 - y2 + z2], dim=1).reshape(B, 3, 3)
     return rotMat
 
+def clip_point_cloud(point_cloud, radius, order=np.inf, normalize=False):
+    # point_cloud: xyz x N
+    norms = np.linalg.norm(point_cloud[:3], axis=0, ord=order)
+    maxnorm = np.max(norms) if normalize else 1.0
+    inds = (norms / maxnorm) <= radius
+    return point_cloud[:, inds]
 
 def transform_point_cloud(point_cloud, rotation, translation):
     if len(rotation.size()) == 2:
@@ -44,4 +50,33 @@ def npmat2euler(mats, seq='zyx'):
         r = Rotation.from_matrix(mats[i])
         eulers.append(r.as_euler(seq, degrees=True))
     return np.asarray(eulers, dtype='float32')
+
+def transRot(V, rot, t, asform="quaternion", reverse=False):
+    # translates and rotates a given point cloud by specified parameters
+    # V is a point cloud,
+    # rot is a rotation, which can be given in 3 forms determined by asform
+    #   1) a quaternion (versor) rotation,
+    #   2) a rotation matrix
+    #   3) a set of Euler angles
+    # t is a 3D translation
+ 
+    # first map all rotations to matrices using scipy's nice little rotation module!
+    if asform == "quaternion":
+        # rot is a quaternion
+        r = np.asarray(Rotation.as_matrix(Rotation.from_quat(rot)))
+    elif asform == "matrix":
+        # rot is a rotation matrix
+        r = rot
+    elif asform == "angles":
+        # rot is 3 angles -- x, y, z
+        r = np.asarray(Rotation.as_matrix(Rotation.from_euler('xyz',rot,degrees=True)))
+ 
+    N = V.shape[1]
+    # it is just a matrix multiply and addition
+
+    if reverse:
+        V = r.T @ (V - np.tile(np.array([t]).T,(1,N)))
+    else:
+        V = np.tile(np.array([t]).T,(1,N))+ r@V
+    return V
 

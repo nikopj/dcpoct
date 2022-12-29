@@ -10,6 +10,8 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 from torch.utils.data import Dataset
 
+import util
+
 
 # Part of the code is referred from: https://github.com/charlesq34/pointnet
 
@@ -115,6 +117,13 @@ class ModelNet40(Dataset):
 
         euler_ab = np.asarray([anglez, angley, anglex])
         euler_ba = -euler_ab[::-1]
+
+        t =  np.array([0.5, -0.5, 0.5])
+        alpha = np.random.uniform(low=-45, high=45, size=[3])
+        alpha = np.asarray(Rotation.as_matrix(Rotation.from_euler('xyz',alpha,degrees=True)))
+        pc1 = util.transRot(pointcloud1, alpha, t, asform="matrix")
+        pc1 = util.clip_point_cloud(pc1, 1.0, order=np.inf)
+        pointcloud1 = util.transRot(pc1, alpha, t, asform="matrix", reverse=True)
 
         pointcloud1 = np.random.permutation(pointcloud1.T).T
         pointcloud2 = np.random.permutation(pointcloud2.T).T

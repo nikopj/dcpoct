@@ -70,7 +70,7 @@ def test_one_epoch(args, net, test_loader):
     eulers_ab = []
     eulers_ba = []
 
-    for src, target, rotation_ab, translation_ab, rotation_ba, translation_ba, euler_ab, euler_ba in tqdm(test_loader):
+    for (i, (src, target, rotation_ab, translation_ab, rotation_ba, translation_ba, euler_ab, euler_ba)) in tqdm(enumerate(test_loader)):
         src = src.cuda()
         target = target.cuda()
         rotation_ab = rotation_ab.cuda()
@@ -99,39 +99,40 @@ def test_one_epoch(args, net, test_loader):
 
         transformed_target = transform_point_cloud(target, rotation_ba_pred, translation_ba_pred)
 
-        print("src", src.shape)
-        print("target", target.shape)
-        print("transformed_src", transformed_src.shape)
-        print("transformed_target", transformed_target.shape)
+        if i == 2004:
+            print("src", src.shape)
+            print("target", target.shape)
+            print("transformed_src", transformed_src.shape)
+            print("transformed_target", transformed_target.shape)
 
-        np.save("src.npy", src[0].detach().cpu().numpy())
-        np.save("target.npy", target[0].detach().cpu().numpy())
-        np.save("transformed_target.npy", transformed_target[0].detach().cpu().numpy())
-        quit()
+            np.save("src.npy", src[0].detach().cpu().numpy())
+            np.save("target.npy", target[0].detach().cpu().numpy())
+            np.save("transformed_target.npy", transformed_target[0].detach().cpu().numpy())
+            quit()
 
         ###########################
-        identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
-        loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
-               + F.mse_loss(translation_ab_pred, translation_ab)
-        if args.cycle:
-            rotation_loss = F.mse_loss(torch.matmul(rotation_ba_pred, rotation_ab_pred), identity.clone())
-            translation_loss = torch.mean((torch.matmul(rotation_ba_pred.transpose(2, 1),
-                                                        translation_ab_pred.view(batch_size, 3, 1)).view(batch_size, 3)
-                                           + translation_ba_pred) ** 2, dim=[0, 1])
-            cycle_loss = rotation_loss + translation_loss
+        # identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
+        # loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
+        #        + F.mse_loss(translation_ab_pred, translation_ab)
+        # if args.cycle:
+        #     rotation_loss = F.mse_loss(torch.matmul(rotation_ba_pred, rotation_ab_pred), identity.clone())
+        #     translation_loss = torch.mean((torch.matmul(rotation_ba_pred.transpose(2, 1),
+        #                                                 translation_ab_pred.view(batch_size, 3, 1)).view(batch_size, 3)
+        #                                    + translation_ba_pred) ** 2, dim=[0, 1])
+        #     cycle_loss = rotation_loss + translation_loss
 
-            loss = loss + cycle_loss * 0.1
+        #     loss = loss + cycle_loss * 0.1
 
-        total_loss += loss.item() * batch_size
+        # total_loss += loss.item() * batch_size
 
-        if args.cycle:
-            total_cycle_loss = total_cycle_loss + cycle_loss.item() * 0.1 * batch_size
+        # if args.cycle:
+        #     total_cycle_loss = total_cycle_loss + cycle_loss.item() * 0.1 * batch_size
 
-        mse_ab += torch.mean((transformed_src - target) ** 2, dim=[0, 1, 2]).item() * batch_size
-        mae_ab += torch.mean(torch.abs(transformed_src - target), dim=[0, 1, 2]).item() * batch_size
+        # mse_ab += torch.mean((transformed_src - target) ** 2, dim=[0, 1, 2]).item() * batch_size
+        # mae_ab += torch.mean(torch.abs(transformed_src - target), dim=[0, 1, 2]).item() * batch_size
 
-        mse_ba += torch.mean((transformed_target - src) ** 2, dim=[0, 1, 2]).item() * batch_size
-        mae_ba += torch.mean(torch.abs(transformed_target - src), dim=[0, 1, 2]).item() * batch_size
+        # mse_ba += torch.mean((transformed_target - src) ** 2, dim=[0, 1, 2]).item() * batch_size
+        # mae_ba += torch.mean(torch.abs(transformed_target - src), dim=[0, 1, 2]).item() * batch_size
 
     rotations_ab = np.concatenate(rotations_ab, axis=0)
     translations_ab = np.concatenate(translations_ab, axis=0)
@@ -550,7 +551,7 @@ def main():
                         help='Dropout ratio in transformer')
     parser.add_argument('--batch_size', type=int, default=32, metavar='batch_size',
                         help='Size of batch)')
-    parser.add_argument('--test_batch_size', type=int, default=10, metavar='batch_size',
+    parser.add_argument('--test_batch_size', type=int, default=1, metavar='batch_size',
                         help='Size of batch)')
     parser.add_argument('--epochs', type=int, default=250, metavar='N',
                         help='number of episode to train ')
