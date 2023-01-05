@@ -61,7 +61,19 @@ def jitter_pointcloud(pointcloud, sigma=0.01, clip=0.05):
 
 
 class ModelNet40(Dataset):
-    def __init__(self, num_points, partition='train', gaussian_noise=False, unseen=False, factor=4):
+    def __init__(self, 
+            num_points, 
+            partition='train', 
+            gaussian_noise=False, unseen=False, 
+            factor=4,
+            sigma_jitter = 0,
+            sigma_virtual = 0,
+            occlude_quantization = 1e-5,
+            p_spur = 0, 
+            p_virtual = 0, 
+            clip_radius = 1, 
+            occlude_alpha = 0
+        ):
         self.data, self.label = load_data(partition)
         self.num_points = num_points
         self.partition = partition
@@ -69,6 +81,15 @@ class ModelNet40(Dataset):
         self.unseen = unseen
         self.label = self.label.squeeze()
         self.factor = factor
+
+        self.sigma_jitter = sigma_jitter
+        self.sigma_virtual = sigma_virtual
+        self.occlude_quantization = occlude_quantization
+        self.p_spur = p_spur
+        self.p_virtual = p_virtual
+        self.clip_radius = clip_radius
+        self.occlude_alpha = occlude_alpha
+
         if self.unseen:
             ######## simulate testing on first 20 categories while training on last 20 categories
             if self.partition == 'test':
@@ -118,12 +139,24 @@ class ModelNet40(Dataset):
         euler_ab = np.asarray([anglez, angley, anglex])
         euler_ba = -euler_ab[::-1]
 
-        t =  np.array([0.5, -0.5, 0.5])
-        alpha = np.random.uniform(low=-45, high=45, size=[3])
-        alpha = np.asarray(Rotation.as_matrix(Rotation.from_euler('xyz',alpha,degrees=True)))
-        pc1 = util.transRot(pointcloud1, alpha, t, asform="matrix")
-        pc1 = util.clip_point_cloud(pc1, 1.0, order=np.inf)
-        pointcloud1 = util.transRot(pc1, alpha, t, asform="matrix", reverse=True)
+        # t =  np.array([0.5, -0.5, 0.5])
+        # theta = np.random.uniform(low=-45, high=45, size=[3])
+        # theta = np.asarray(Rotation.as_matrix(Rotation.from_euler('xyz',theta,degrees=True)))
+        # pc1 = util.transRot(pointcloud1, theta, t, asform="matrix")
+        # pc1 = util.clip_point_cloud(pc1, 1.0, order=np.inf)
+        # pointcloud1 = util.transRot(pc1, alpha, t, asform="matrix", reverse=True)
+
+        pointcloud1 = util.jitter_point_cloud(pointcloud1, self.sigma_jitter)
+        pointcloud1 = util.virtual_jitter_point_cloud(pointcloud1, self.sigma_virtual, self.p_virtual)
+        pointcloud1 = util.occlude_point_cloud(pointcloud1, q=self.occlude_quantization, alpha=self.occlude_alpha)
+        pointcloud1 = util.spurious_point_cloud(pointcloud1, self.p_spur)
+        pointcloud1 = util.clip_point_cloud(pointcloud1, self.clip_radius, order=np.inf)
+
+        pointcloud2 = util.jitter_point_cloud(pointcloud2, self.sigma_jitter)
+        pointcloud2 = util.virtual_jitter_point_cloud(pointcloud2, self.sigma_virtual, self.p_virtual)
+        pointcloud2 = util.occlude_point_cloud(pointcloud2, q=self.occlude_quantization, alpha=self.occlude_alpha)
+        pointcloud2 = util.spurious_point_cloud(pointcloud2, self.p_spur)
+        pointcloud2 = util.clip_point_cloud(pointcloud2, self.clip_radius, order=np.inf)
 
         pointcloud1 = np.random.permutation(pointcloud1.T).T
         pointcloud2 = np.random.permutation(pointcloud2.T).T

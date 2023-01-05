@@ -99,7 +99,7 @@ def test_one_epoch(args, net, test_loader):
 
         transformed_target = transform_point_cloud(target, rotation_ba_pred, translation_ba_pred)
 
-        if i == 2004:
+        if i == 227:
             print("src", src.shape)
             print("target", target.shape)
             print("transformed_src", transformed_src.shape)
@@ -108,25 +108,24 @@ def test_one_epoch(args, net, test_loader):
             np.save("src.npy", src[0].detach().cpu().numpy())
             np.save("target.npy", target[0].detach().cpu().numpy())
             np.save("transformed_target.npy", transformed_target[0].detach().cpu().numpy())
-            quit()
 
         ###########################
-        # identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
-        # loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
-        #        + F.mse_loss(translation_ab_pred, translation_ab)
-        # if args.cycle:
-        #     rotation_loss = F.mse_loss(torch.matmul(rotation_ba_pred, rotation_ab_pred), identity.clone())
-        #     translation_loss = torch.mean((torch.matmul(rotation_ba_pred.transpose(2, 1),
-        #                                                 translation_ab_pred.view(batch_size, 3, 1)).view(batch_size, 3)
-        #                                    + translation_ba_pred) ** 2, dim=[0, 1])
-        #     cycle_loss = rotation_loss + translation_loss
+        identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
+        loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
+               + F.mse_loss(translation_ab_pred, translation_ab)
+        if args.cycle:
+            rotation_loss = F.mse_loss(torch.matmul(rotation_ba_pred, rotation_ab_pred), identity.clone())
+            translation_loss = torch.mean((torch.matmul(rotation_ba_pred.transpose(2, 1),
+                                                        translation_ab_pred.view(batch_size, 3, 1)).view(batch_size, 3)
+                                           + translation_ba_pred) ** 2, dim=[0, 1])
+            cycle_loss = rotation_loss + translation_loss
 
-        #     loss = loss + cycle_loss * 0.1
+            loss = loss + cycle_loss * 0.1
 
-        # total_loss += loss.item() * batch_size
+        total_loss += loss.item() * batch_size
 
-        # if args.cycle:
-        #     total_cycle_loss = total_cycle_loss + cycle_loss.item() * 0.1 * batch_size
+        if args.cycle:
+            total_cycle_loss = total_cycle_loss + cycle_loss.item() * 0.1 * batch_size
 
         # mse_ab += torch.mean((transformed_src - target) ** 2, dim=[0, 1, 2]).item() * batch_size
         # mae_ab += torch.mean(torch.abs(transformed_src - target), dim=[0, 1, 2]).item() * batch_size
@@ -227,11 +226,11 @@ def train_one_epoch(args, net, train_loader, opt):
         if args.cycle:
             total_cycle_loss = total_cycle_loss + cycle_loss.item() * 0.1 * batch_size
 
-        mse_ab += torch.mean((transformed_src - target) ** 2, dim=[0, 1, 2]).item() * batch_size
-        mae_ab += torch.mean(torch.abs(transformed_src - target), dim=[0, 1, 2]).item() * batch_size
+        # mse_ab += torch.mean((transformed_src - target) ** 2, dim=[0, 1, 2]).item() * batch_size
+        # mae_ab += torch.mean(torch.abs(transformed_src - target), dim=[0, 1, 2]).item() * batch_size
 
-        mse_ba += torch.mean((transformed_target - src) ** 2, dim=[0, 1, 2]).item() * batch_size
-        mae_ba += torch.mean(torch.abs(transformed_target - src), dim=[0, 1, 2]).item() * batch_size
+        # mse_ba += torch.mean((transformed_target - src) ** 2, dim=[0, 1, 2]).item() * batch_size
+        # mae_ba += torch.mean(torch.abs(transformed_target - src), dim=[0, 1, 2]).item() * batch_size
 
     rotations_ab = np.concatenate(rotations_ab, axis=0)
     translations_ab = np.concatenate(translations_ab, axis=0)
@@ -597,11 +596,25 @@ def main():
     if args.dataset == 'modelnet40':
         train_loader = DataLoader(
             ModelNet40(num_points=args.num_points, partition='train', gaussian_noise=args.gaussian_noise,
-                       unseen=args.unseen, factor=args.factor),
+                       unseen=args.unseen, factor=args.factor,
+                       sigma_jitter = 0,
+                       sigma_virtual = 0.05,
+                       occlude_quantization = 1e-5,
+                       p_spur = 0, 
+                       p_virtual = 0.1, 
+                       clip_radius = np.inf, 
+                       occlude_alpha = 0),
             batch_size=args.batch_size, shuffle=True, drop_last=True)
         test_loader = DataLoader(
             ModelNet40(num_points=args.num_points, partition='test', gaussian_noise=args.gaussian_noise,
-                       unseen=args.unseen, factor=args.factor),
+                       unseen=args.unseen, factor=args.factor,
+                       sigma_jitter = 0,
+                       sigma_virtual = 0.05,
+                       occlude_quantization = 1e-5,
+                       p_spur = 0, 
+                       p_virtual = 0.1, 
+                       clip_radius = np.inf, 
+                       occlude_alpha = 0),
             batch_size=args.test_batch_size, shuffle=False, drop_last=False)
     else:
         raise Exception("not implemented")
@@ -609,7 +622,7 @@ def main():
     if args.model == 'dcp':
         net = DCP(args).cuda()
         if args.eval:
-            if args.model_path is '':
+            if args.model_path == '':
                 model_path = 'checkpoints' + '/' + args.exp_name + '/models/model.best.t7'
             else:
                 model_path = args.model_path

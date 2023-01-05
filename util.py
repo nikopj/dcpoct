@@ -29,6 +29,17 @@ def quat2mat(quat):
                           2*xz - 2*wy, 2*wx + 2*yz, w2 - x2 - y2 + z2], dim=1).reshape(B, 3, 3)
     return rotMat
 
+def jitter_point_cloud(point_cloud, sd):
+    return point_cloud + sd*np.random.randn(*point_cloud.shape)
+
+def virtual_jitter_point_cloud(point_cloud, sd, p):
+    inc = np.random.rand(point_cloud.shape[1]) <= p
+    if len(inc) == 0:
+        return point_cloud
+    v = point_cloud[:, inc] 
+    v = v + sd*np.random.randn(*v.shape)
+    return np.concatenate([point_cloud, v], axis=1)
+
 def clip_point_cloud(point_cloud, radius, order=np.inf, normalize=False):
     # point_cloud: xyz x N
     norms = np.linalg.norm(point_cloud[:3], axis=0, ord=order)
@@ -36,13 +47,30 @@ def clip_point_cloud(point_cloud, radius, order=np.inf, normalize=False):
     inds = (norms / maxnorm) <= radius
     return point_cloud[:, inds]
 
+def spurious_point_cloud(point_cloud, p):
+    N = int(point_cloud.shape[1]*p)
+    if N == 0:
+        return point_cloud
+    v = np.max(np.abs(point_cloud))*(2*np.random.rand(3, N)-1) + np.mean(point_cloud, axis=1)[:, None]
+    return np.concatenate([point_cloud, v], axis=1)
+
+def occlude_point_cloud(point_cloud, q=1, alpha=0):
+    if alpha == 0:
+        return point_cloud
+    xyq = q*np.floor(point_cloud[0:2,:]/q + 0.5) # quantize xy coords
+    bins, inv = np.unique(xyq, axis=1, return_inverse=True) 
+    binmin = np.array([np.min(point_cloud[2, inv==i]) for i in range(bins.shape[1])])
+    zmin = binmin[inv]
+    p = np.exp(-alpha*(point_cloud[2, :] - zmin))
+    b = np.random.rand(*p.shape) <= p
+    return point_cloud[:, b]
+
 def transform_point_cloud(point_cloud, rotation, translation):
     if len(rotation.size()) == 2:
         rot_mat = quat2mat(rotation)
     else:
         rot_mat = rotation
     return torch.matmul(rot_mat, point_cloud) + translation.unsqueeze(2)
-
 
 def npmat2euler(mats, seq='zyx'):
     eulers = []
