@@ -96,7 +96,6 @@ def test_one_epoch(args, net, test_loader):
         eulers_ba.append(euler_ba.numpy())
 
         transformed_src = transform_point_cloud(src, rotation_ab_pred, translation_ab_pred)
-
         transformed_target = transform_point_cloud(target, rotation_ba_pred, translation_ba_pred)
 
         if i == 227:
@@ -177,7 +176,9 @@ def train_one_epoch(args, net, train_loader, opt):
     eulers_ab = []
     eulers_ba = []
 
-    for src, target, rotation_ab, translation_ab, rotation_ba, translation_ba, euler_ab, euler_ba in tqdm(train_loader):
+    N_ACCUMULATE = 32
+    _progmeter =tqdm(train_loader)
+    for (batch_idx, (src, target, rotation_ab, translation_ab, rotation_ba, translation_ba, euler_ab, euler_ba)) in enumerate(_progmeter):
         src = src.cuda()
         target = target.cuda()
         rotation_ab = rotation_ab.cuda()
@@ -186,7 +187,7 @@ def train_one_epoch(args, net, train_loader, opt):
         translation_ba = translation_ba.cuda()
 
         batch_size = src.size(0)
-        opt.zero_grad()
+        #opt.zero_grad()
         num_examples += batch_size
         rotation_ab_pred, translation_ab_pred, rotation_ba_pred, translation_ba_pred = net(src, target)
 
@@ -208,6 +209,7 @@ def train_one_epoch(args, net, train_loader, opt):
         transformed_target = transform_point_cloud(target, rotation_ba_pred, translation_ba_pred)
         ###########################
         identity = torch.eye(3).cuda().unsqueeze(0).repeat(batch_size, 1, 1)
+
         loss = F.mse_loss(torch.matmul(rotation_ab_pred.transpose(2, 1), rotation_ab), identity) \
                + F.mse_loss(translation_ab_pred, translation_ab)
         if args.cycle:
@@ -220,11 +222,15 @@ def train_one_epoch(args, net, train_loader, opt):
             loss = loss + cycle_loss * 0.1
 
         loss.backward()
-        opt.step()
+        #opt.step()
         total_loss += loss.item() * batch_size
 
         if args.cycle:
             total_cycle_loss = total_cycle_loss + cycle_loss.item() * 0.1 * batch_size
+
+        if ((batch_idx + 1) % N_ACCUMULATE == 0) or (batch_idx + 1 == len(train_loader)):
+            opt.step()
+            opt.zero_grad()
 
         # mse_ab += torch.mean((transformed_src - target) ** 2, dim=[0, 1, 2]).item() * batch_size
         # mae_ab += torch.mean(torch.abs(transformed_src - target), dim=[0, 1, 2]).item() * batch_size
@@ -269,6 +275,12 @@ def test(args, net, test_loader, boardio, textio):
     test_t_mse_ab = np.mean((test_translations_ab - test_translations_ab_pred) ** 2)
     test_t_rmse_ab = np.sqrt(test_t_mse_ab)
     test_t_mae_ab = np.mean(np.abs(test_translations_ab - test_translations_ab_pred))
+
+    for t in [1, 2, 5]:
+        err_angle = np.mean(np.abs(test_rotations_ab_pred_euler - np.degrees(test_eulers_ab)), axis=1)
+        err_trans = np.mean(np.abs(test_translations_ab - test_translations_ab_pred), axis=1)
+        acc = np.sum((err_angle <= t) * (err_trans <= 1e-2)) / len(err_angle) * 100
+        print(f"t={t}: accuracy={acc}")
 
     test_rotations_ba_pred_euler = npmat2euler(test_rotations_ba_pred, 'xyz')
     test_r_mse_ba = np.mean((test_rotations_ba_pred_euler - np.degrees(test_eulers_ba)) ** 2)
@@ -598,22 +610,22 @@ def main():
             ModelNet40(num_points=args.num_points, partition='train', gaussian_noise=args.gaussian_noise,
                        unseen=args.unseen, factor=args.factor,
                        sigma_jitter = 0,
-                       sigma_virtual = 0.05,
+                       sigma_virtual = 0,
                        occlude_quantization = 1e-5,
                        p_spur = 0, 
-                       p_virtual = 0.1, 
-                       clip_radius = np.inf, 
+                       p_virtual = 0, 
+                       clip_radius = 0.75, 
                        occlude_alpha = 0),
             batch_size=args.batch_size, shuffle=True, drop_last=True)
         test_loader = DataLoader(
             ModelNet40(num_points=args.num_points, partition='test', gaussian_noise=args.gaussian_noise,
                        unseen=args.unseen, factor=args.factor,
                        sigma_jitter = 0,
-                       sigma_virtual = 0.05,
+                       sigma_virtual = 0,
                        occlude_quantization = 1e-5,
                        p_spur = 0, 
-                       p_virtual = 0.1, 
-                       clip_radius = np.inf, 
+                       p_virtual = 0, 
+                       clip_radius = 0.75, 
                        occlude_alpha = 0),
             batch_size=args.test_batch_size, shuffle=False, drop_last=False)
     else:
